@@ -1,4 +1,4 @@
-import type { Particle, SimParams, Preset } from '../types'
+import type { Particle, SimParams, Preset, FluidSource, SourcePosition } from '../types'
 
 export const DEFAULT_PARAMS: SimParams = {
   gravity: 9.8,
@@ -75,11 +75,14 @@ function viscosityLaplacian(r: number, h: number): number {
 
 export class SPHEngine {
   particles: Particle[] = []
+  sources: FluidSource[] = []
   params: SimParams
   width: number
   height: number
+  maxParticles: number = 3000
   private grid: Map<number, number[]> = new Map()
   private cellSize: number = 0
+  private _injectAccumulator: Map<string, number> = new Map()
 
   constructor(count: number, width: number, height: number, params?: Partial<SimParams>) {
     this.width = width
@@ -89,7 +92,7 @@ export class SPHEngine {
   }
 
   initParticles(config: 'dam' | 'drop' | 'fountain' | 'wave', count?: number) {
-    const n = count ?? this.particles.length || 800
+    const n = count ?? (this.particles.length || 800)
     this.particles = []
 
     switch (config) {
@@ -221,6 +224,8 @@ export class SPHEngine {
   }
 
   step() {
+    this.injectParticles()
+
     const { gravity, viscosity, restDensity, gasConstant, smoothingRadius, particleMass, dt, damping } = this.params
     const h = smoothingRadius
     const m = particleMass
@@ -322,6 +327,73 @@ export class SPHEngine {
         const factor = strength * (1 - dist / radius)
         p.vx += (dx / dist) * factor
         p.vy += (dy / dist) * factor
+      }
+    }
+  }
+
+  addSource(source: FluidSource) {
+    const existing = this.sources.find(s => s.id === source.id)
+    if (!existing) {
+      this.sources.push(source)
+      this._injectAccumulator.set(source.id, 0)
+    }
+  }
+
+  removeSource(sourceId: string) {
+    this.sources = this.sources.filter(s => s.id !== sourceId)
+    this._injectAccumulator.delete(sourceId)
+  }
+
+  updateSource(sourceId: string, updates: Partial<FluidSource>) {
+    const source = this.sources.find(s => s.id === sourceId)
+    if (source) {
+      Object.assign(source, updates)
+    }
+  }
+
+  private getSpawnPosition(position: SourcePosition): { x: number; y: number } {
+    const margin = 15
+    const spread = 40
+    const centerX = this.width / 2
+    const centerY = this.height / 2
+
+    switch (position) {
+      case 'top':
+        return { x: centerX + (Math.random() - 0.5) * spread, y: margin }
+      case 'bottom':
+        return { x: centerX + (Math.random() - 0.5) * spread, y: this.height - margin }
+      case 'left':
+        return { x: margin, y: centerY + (Math.random() - 0.5) * spread }
+      case 'right':
+        return { x: this.width - margin, y: centerY + (Math.random() - 0.5) * spread }
+      case 'top-left':
+        return { x: margin + (Math.random() - 0.5) * spread * 0.5, y: margin + (Math.random() - 0.5) * spread * 0.5 }
+      case 'top-right':
+        return { x: this.width - margin + (Math.random() - 0.5) * spread * 0.5, y: margin + (Math.random() - 0.5) * spread * 0.5 }
+      case 'bottom-left':
+        return { x: margin + (Math.random() - 0.5) * spread * 0.5, y: this.height - margin + (Math.random() - 0.5) * spread * 0.5 }
+      case 'bottom-right':
+        return { x: this.width - margin + (Math.random() - 0.5) * spread * 0.5, y: this.height - margin + (Math.random() - 0.5) * spread * 0.5 }
+    }
+  }
+
+  private injectParticles() {
+    if (this.particles.length >= this.maxParticles) return
+
+    for (const source of this.sources) {
+      if (!source.enabled) continue
+
+      const accum = this._injectAccumulator.get(source.id) || 0
+      const total = accum + source.flowRate
+      const count = Math.floor(total)
+      this._injectAccumulator.set(source.id, total - count)
+
+      for (let i = 0; i < count && this.particles.length < this.maxParticles; i++) {
+        const pos = this.getSpawnPosition(source.position)
+        const p = this.createParticle(pos.x, pos.y)
+        p.vx = source.velocityX + (Math.random() - 0.5) * 20
+        p.vy = source.velocityY + (Math.random() - 0.5) * 20
+        this.particles.push(p)
       }
     }
   }

@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useFluidStore } from '../store/fluid'
 import { PRESETS } from '../utils/sph-engine'
-import type { Preset } from '../types'
+import type { Preset, SourcePosition } from '../types'
+import { SOURCE_POSITIONS } from '../types'
 
 const store = useFluidStore()
+const selectedPosition = ref<SourcePosition>('top')
 
 function selectPreset(preset: Preset) {
   store.initSimulation(preset)
@@ -39,6 +42,26 @@ function onParticleCount(e: Event) {
 }
 function onDt(e: Event) {
   store.updateParam('dt', parseFloat((e.target as HTMLInputElement).value))
+}
+
+function addSource() {
+  store.addSource(selectedPosition.value)
+}
+
+function onSourceFlow(e: Event, sourceId: string) {
+  store.updateSourceParam(sourceId, 'flowRate', parseFloat((e.target as HTMLInputElement).value))
+}
+
+function onSourceVelX(e: Event, sourceId: string) {
+  store.updateSourceParam(sourceId, 'velocityX', parseFloat((e.target as HTMLInputElement).value))
+}
+
+function onSourceVelY(e: Event, sourceId: string) {
+  store.updateSourceParam(sourceId, 'velocityY', parseFloat((e.target as HTMLInputElement).value))
+}
+
+function getPositionLabel(pos: SourcePosition): string {
+  return SOURCE_POSITIONS.find(p => p.value === pos)?.label || pos
 }
 </script>
 
@@ -158,6 +181,113 @@ function onDt(e: Event) {
           class="w-full accent-blue-500 h-1.5"
         />
       </div>
+    </div>
+
+    <!-- Fluid Sources -->
+    <div class="space-y-3">
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">流体来源</h3>
+
+      <div class="flex gap-2">
+        <select
+          v-model="selectedPosition"
+          class="flex-1 bg-gray-700 text-gray-200 text-xs px-2 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
+        >
+          <option v-for="pos in SOURCE_POSITIONS" :key="pos.value" :value="pos.value">
+            {{ pos.label }}
+          </option>
+        </select>
+        <button
+          @click="addSource"
+          class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded transition"
+        >
+          添加
+        </button>
+      </div>
+
+      <div v-if="store.sources.length > 0" class="space-y-2">
+        <div
+          v-for="source in store.sources"
+          :key="source.id"
+          class="bg-gray-900 rounded p-2 border border-gray-700"
+        >
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <div
+                class="w-3 h-3 rounded-full"
+                :style="{ backgroundColor: source.color }"
+              />
+              <span class="text-xs text-gray-300 font-medium">{{ getPositionLabel(source.position) }}</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button
+                @click="store.toggleSource(source.id)"
+                class="text-xs px-2 py-1 rounded transition"
+                :class="source.enabled
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-600 text-gray-300'"
+              >
+                {{ source.enabled ? '开启' : '关闭' }}
+              </button>
+              <button
+                @click="store.removeSource(source.id)"
+                class="text-xs px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white transition"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <div>
+              <label class="flex justify-between text-xs text-gray-500 mb-1">
+                <span>流量</span>
+                <span class="text-gray-400">{{ source.flowRate.toFixed(1) }}/帧</span>
+              </label>
+              <input
+                type="range" min="0" max="10" step="0.5"
+                :value="source.flowRate"
+                @input="onSourceFlow($event, source.id)"
+                class="w-full accent-blue-500 h-1.5"
+              />
+            </div>
+            <div>
+              <label class="flex justify-between text-xs text-gray-500 mb-1">
+                <span>X速度</span>
+                <span class="text-gray-400">{{ source.velocityX.toFixed(0) }}</span>
+              </label>
+              <input
+                type="range" min="-200" max="200" step="10"
+                :value="source.velocityX"
+                @input="onSourceVelX($event, source.id)"
+                class="w-full accent-blue-500 h-1.5"
+              />
+            </div>
+            <div>
+              <label class="flex justify-between text-xs text-gray-500 mb-1">
+                <span>Y速度</span>
+                <span class="text-gray-400">{{ source.velocityY.toFixed(0) }}</span>
+              </label>
+              <input
+                type="range" min="-200" max="200" step="10"
+                :value="source.velocityY"
+                @input="onSourceVelY($event, source.id)"
+                class="w-full accent-blue-500 h-1.5"
+              />
+            </div>
+          </div>
+        </div>
+
+        <button
+          @click="store.clearSources"
+          class="w-full text-xs py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition"
+        >
+          清除所有来源
+        </button>
+      </div>
+
+      <p v-else class="text-xs text-gray-500 italic">
+        从边缘位置添加流体来源，观察粒子蓄积与溢散过程
+      </p>
     </div>
 
     <!-- Stats -->

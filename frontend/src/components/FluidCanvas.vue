@@ -1,12 +1,38 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useFluidStore } from '../store/fluid'
+import type { SourcePosition } from '../types'
 
 const store = useFluidStore()
 const canvas = ref<HTMLCanvasElement | null>(null)
 
 const W = 800
 const H = 500
+
+function getSourceMarkerPosition(position: SourcePosition): { x: number; y: number } {
+  const margin = 25
+  const centerX = W / 2
+  const centerY = H / 2
+
+  switch (position) {
+    case 'top':
+      return { x: centerX, y: margin }
+    case 'bottom':
+      return { x: centerX, y: H - margin }
+    case 'left':
+      return { x: margin, y: centerY }
+    case 'right':
+      return { x: W - margin, y: centerY }
+    case 'top-left':
+      return { x: margin, y: margin }
+    case 'top-right':
+      return { x: W - margin, y: margin }
+    case 'bottom-left':
+      return { x: margin, y: H - margin }
+    case 'bottom-right':
+      return { x: W - margin, y: H - margin }
+  }
+}
 
 function velocityToColor(speed: number): string {
   // Blue (slow) -> Green (medium) -> Red (fast)
@@ -83,6 +109,69 @@ function draw() {
     ctx.beginPath()
     ctx.arc(p.x, p.y, radius, 0, Math.PI * 2)
     ctx.fillStyle = color
+    ctx.fill()
+  }
+
+  // Draw fluid source markers
+  for (const source of store.sources) {
+    const pos = getSourceMarkerPosition(source.position)
+    const radius = source.enabled ? 12 : 8
+
+    // Outer glow for enabled sources
+    if (source.enabled) {
+      const gradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius * 2)
+      gradient.addColorStop(0, source.color + '80')
+      gradient.addColorStop(1, source.color + '00')
+      ctx.beginPath()
+      ctx.arc(pos.x, pos.y, radius * 2, 0, Math.PI * 2)
+      ctx.fillStyle = gradient
+      ctx.fill()
+    }
+
+    // Main marker circle
+    ctx.beginPath()
+    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2)
+    ctx.fillStyle = source.enabled ? source.color : source.color + '60'
+    ctx.fill()
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 2
+    ctx.stroke()
+
+    // Velocity direction arrow
+    if (source.enabled && (source.velocityX !== 0 || source.velocityY !== 0)) {
+      const vx = source.velocityX
+      const vy = source.velocityY
+      const speed = Math.sqrt(vx * vx + vy * vy)
+      if (speed > 0) {
+        const arrowLen = 20
+        const nx = vx / speed
+        const ny = vy / speed
+        const endX = pos.x + nx * arrowLen
+        const endY = pos.y + ny * arrowLen
+
+        ctx.beginPath()
+        ctx.moveTo(pos.x + nx * (radius + 2), pos.y + ny * (radius + 2))
+        ctx.lineTo(endX, endY)
+        ctx.strokeStyle = source.color
+        ctx.lineWidth = 2.5
+        ctx.stroke()
+
+        // Arrow head
+        const headLen = 6
+        const angle = Math.atan2(ny, nx)
+        ctx.beginPath()
+        ctx.moveTo(endX, endY)
+        ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI / 6), endY - headLen * Math.sin(angle - Math.PI / 6))
+        ctx.moveTo(endX, endY)
+        ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI / 6), endY - headLen * Math.sin(angle + Math.PI / 6))
+        ctx.stroke()
+      }
+    }
+
+    // Inner icon (inlet symbol)
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.arc(pos.x, pos.y, 3, 0, Math.PI * 2)
     ctx.fill()
   }
 

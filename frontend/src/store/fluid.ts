@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { SPHEngine, DEFAULT_PARAMS, PRESETS } from '../utils/sph-engine'
-import type { SimParams, Preset, Particle } from '../types'
+import type { SimParams, Preset, Particle, FluidSource, SourcePosition } from '../types'
 
 export const useFluidStore = defineStore('fluid', {
   state: () => ({
@@ -11,6 +11,7 @@ export const useFluidStore = defineStore('fluid', {
     params: { ...DEFAULT_PARAMS } as SimParams,
     fps: 0,
     frameCount: 0,
+    sources: [] as FluidSource[],
     _animId: null as number | null,
     _lastTime: 0,
     _fpsAccum: 0,
@@ -38,6 +39,9 @@ export const useFluidStore = defineStore('fluid', {
       const canvas = { width: 800, height: 500 }
       this.engine = new SPHEngine(this.particleCount, canvas.width, canvas.height, this.params)
       this.engine.initParticles(this.currentPreset.initialConfig, this.particleCount)
+      for (const source of this.sources) {
+        this.engine.addSource(source)
+      }
       this.frameCount = 0
       this.fps = 0
     },
@@ -94,6 +98,65 @@ export const useFluidStore = defineStore('fluid', {
         if (key === 'smoothingRadius') {
           this.engine['cellSize'] = value
         }
+      }
+    },
+    addSource(position: SourcePosition) {
+      const id = `source-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const velocityMap: Record<SourcePosition, { vx: number; vy: number }> = {
+        'top': { vx: 0, vy: 50 },
+        'bottom': { vx: 0, vy: -50 },
+        'left': { vx: 50, vy: 0 },
+        'right': { vx: -50, vy: 0 },
+        'top-left': { vx: 35, vy: 35 },
+        'top-right': { vx: -35, vy: 35 },
+        'bottom-left': { vx: 35, vy: -35 },
+        'bottom-right': { vx: -35, vy: -35 },
+      }
+      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']
+      const vel = velocityMap[position]
+      const source: FluidSource = {
+        id,
+        position,
+        enabled: true,
+        flowRate: 2,
+        velocityX: vel.vx,
+        velocityY: vel.vy,
+        color: colors[Math.floor(Math.random() * colors.length)],
+      }
+      this.sources.push(source)
+      if (this.engine) {
+        this.engine.addSource(source)
+      }
+      return id
+    },
+    removeSource(sourceId: string) {
+      this.sources = this.sources.filter(s => s.id !== sourceId)
+      if (this.engine) {
+        this.engine.removeSource(sourceId)
+      }
+    },
+    toggleSource(sourceId: string) {
+      const source = this.sources.find(s => s.id === sourceId)
+      if (source) {
+        source.enabled = !source.enabled
+        if (this.engine) {
+          this.engine.updateSource(sourceId, { enabled: source.enabled })
+        }
+      }
+    },
+    updateSourceParam(sourceId: string, key: keyof FluidSource, value: number | boolean) {
+      const source = this.sources.find(s => s.id === sourceId)
+      if (source) {
+        ;(source as any)[key] = value
+        if (this.engine) {
+          this.engine.updateSource(sourceId, { [key]: value })
+        }
+      }
+    },
+    clearSources() {
+      this.sources = []
+      if (this.engine) {
+        this.engine.sources = []
       }
     },
   },
