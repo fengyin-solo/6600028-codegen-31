@@ -62,6 +62,9 @@ export const useFluidStore = defineStore('fluid', {
           this._fpsAccum = 0
           this._fpsFrames = 0
         }
+        // Reset injection flag at start of each frame
+        this.engine.resetFrameInjection()
+
         // Sub-steps for stability
         const subSteps = 3
         for (let s = 0; s < subSteps; s++) {
@@ -85,6 +88,7 @@ export const useFluidStore = defineStore('fluid', {
     },
     stepOnce() {
       if (!this.engine || this.isRunning) return
+      this.engine.resetFrameInjection()
       const subSteps = 3
       for (let s = 0; s < subSteps; s++) {
         this.engine.step()

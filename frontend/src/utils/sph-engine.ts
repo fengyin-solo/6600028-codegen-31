@@ -83,6 +83,7 @@ export class SPHEngine {
   private grid: Map<number, number[]> = new Map()
   private cellSize: number = 0
   private _injectAccumulator: Map<string, number> = new Map()
+  private _hasInjectedThisFrame: boolean = false
 
   constructor(count: number, width: number, height: number, params?: Partial<SimParams>) {
     this.width = width
@@ -347,8 +348,15 @@ export class SPHEngine {
   updateSource(sourceId: string, updates: Partial<FluidSource>) {
     const source = this.sources.find(s => s.id === sourceId)
     if (source) {
+      if (updates.enabled === false && source.enabled) {
+        this._injectAccumulator.set(sourceId, 0)
+      }
       Object.assign(source, updates)
     }
+  }
+
+  resetFrameInjection() {
+    this._hasInjectedThisFrame = false
   }
 
   private getSpawnPosition(position: SourcePosition): { x: number; y: number } {
@@ -378,7 +386,10 @@ export class SPHEngine {
   }
 
   private injectParticles() {
+    if (this._hasInjectedThisFrame) return
     if (this.particles.length >= this.maxParticles) return
+
+    this._hasInjectedThisFrame = true
 
     for (const source of this.sources) {
       if (!source.enabled) continue
